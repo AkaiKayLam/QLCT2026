@@ -1,0 +1,1 @@
+window.FIREBASE_CONFIG={apiKey:"AIzaSyA2bIkBQWYbE_ttr2-YhGHgPdpaumsnAy4",authDomain:"qlct2026-adfed.firebaseapp.com",projectId:"qlct2026-adfed",storageBucket:"qlct2026-adfed.firebasestorage.app",messagingSenderId:"53675920114",appId:"1:53675920114:web:bd49a92713c33f1644de6b"};
