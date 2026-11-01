@@ -51,13 +51,15 @@ return{groups:[
   {id:'g2',name:'Ngân hàng'},
   {id:'g3',name:'Tiết kiệm'},
   {id:'g4',name:'Tài sản'},
-  {id:'g5',name:'Ví điện tử'}
+  {id:'g5',name:'Ví điện tử'},
+  {id:'g6',name:'Vay nợ'}
 ],
 accounts:[
   a('Tiền mặt','g1'),
   a('VCB','g2'),a('TCB','g2'),a('MBB','g2'),
   a('tk Tiền mặt','g3'),a('tk VCB','g3'),a('tk TCB','g3'),a('tk MBB','g3'),
-  a('Vàng','g4'),a('Nhà - Đất','g4')
+  a('Vàng','g4'),a('Nhà - Đất','g4'),
+  a('Vay nợ','g6')
 ],
 cats:{
   inc:['Tiền lương','Tiền thưởng','Tiền lãi','Thu khác','Vay nợ'],
@@ -231,9 +233,22 @@ const closeM=()=>{$('#md').classList.remove('show');editId=null;recMode=false};
 let accViewId=null,accQ='';
 function viewAcc(id){
   accViewId=id;accQ='';
-  showAccDetail();
+  const a=acc(id);if(!a)return;
+  // Chỉ dựng khung 1 lần — ô tìm kiếm không bị vẽ lại
+  $('#mb').innerHTML=`<div class="mu" style="margin-bottom:6px">Chi tiết ví</div>
+  <h3 style="margin:0 0 4px">${esc(a.name)}</h3>
+  <div class="big" style="margin-bottom:12px">${fmt(bal(a))} ₫</div>
+  <input id="accSearch" placeholder="Tìm theo ghi chú, hạng mục, từ khóa..." value="" autocomplete="off">
+  <div class="mu" id="accCount" style="margin:6px 0"></div>
+  <div id="accList"></div>
+  <button class="s" style="width:100%;margin-top:12px" onclick="closeM()">Đóng</button>`;
+  $('#md').classList.add('show');
+  const inp=$('#accSearch');
+  inp.oninput=()=>{accQ=inp.value;renderAccTxList()};
+  renderAccTxList();
+  setTimeout(()=>inp.focus(),100);
 }
-function showAccDetail(){
+function renderAccTxList(){
   const a=acc(accViewId);if(!a)return;
   const q=(accQ||'').toLowerCase().trim();
   let list=S.tx.filter(t=>t.acc===a.id||t.to===a.id);
@@ -241,28 +256,25 @@ function showAccDetail(){
     const hay=[t.note,t.cat,t.sub,an(t.acc),an(t.to),t.type,{inc:'thu',exp:'chi',tf:'chuyển',adj:'điều chỉnh'}[t.type]].join(' ').toLowerCase();
     return hay.includes(q);
   });
-  list.sort((a,b)=>b.d.localeCompare(a.d)||(a.id||'').localeCompare(b.id||''));
-  let html=`<div class="mu" style="margin-bottom:6px">Chi tiết ví</div>
-  <h3 style="margin:0 0 4px">${esc(a.name)}</h3>
-  <div class="big" style="margin-bottom:12px">${fmt(bal(a))} ₫</div>
-  <input id="accSearch" placeholder="Tìm theo ghi chú, hạng mục, từ khóa..." value="${esc(accQ)}" oninput="accQ=this.value;showAccDetail()">
-  <div class="mu" style="margin:6px 0">${list.length} giao dịch</div>`;
-  if(!list.length)html+='<div class="mu">Không có giao dịch phù hợp.</div>';
-  else{
-    let lastD='';
-    list.slice(0,200).forEach(t=>{
-      if(t.d!==lastD){lastD=t.d;html+=`<div class="dayh">${t.d}</div>`}
-      const c={inc:'in',exp:'ex',tf:'tf',adj:'mu'}[t.type];
-      const sg={inc:'+',exp:'−',tf:'⇄',adj:t.amt<0?'−':'+'}[t.type];
-      const title=t.type=='adj'?'Điều chỉnh số dư':esc(t.cat||'Chuyển tiền')+(t.sub&&t.sub!=t.cat?' › '+esc(t.sub):'');
-      const w=t.type=='tf'?`${esc(an(t.acc))} → ${esc(an(t.to))}`:esc(an(t.acc));
-      html+=`<div class="row"><div><div>${title}</div><div class="mu">${w}${t.note?' · '+esc(t.note):''}</div></div><div class="r ${c}"><b>${sg}${fmt(Math.abs(t.amt))}</b></div></div>`;
-    });
+  list.sort((x,y)=>y.d.localeCompare(x.d)||(x.id||'').localeCompare(y.id||''));
+  const cnt=$('#accCount');
+  if(cnt)cnt.textContent=list.length+' giao dịch';
+  const box=$('#accList');
+  if(!box)return;
+  if(!list.length){
+    box.innerHTML='<div class="mu">Không có giao dịch phù hợp.</div>';
+    return;
   }
-  html+=`<button class="s" style="width:100%;margin-top:12px" onclick="closeM()">Đóng</button>`;
-  $('#mb').innerHTML=html;
-  $('#md').classList.add('show');
-  setTimeout(()=>{const el=$('#accSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}},50);
+  let html='',lastD='';
+  list.slice(0,200).forEach(t=>{
+    if(t.d!==lastD){lastD=t.d;html+=`<div class="dayh">${t.d}</div>`}
+    const c={inc:'in',exp:'ex',tf:'tf',adj:'mu'}[t.type];
+    const sg={inc:'+',exp:'−',tf:'⇄',adj:t.amt<0?'−':'+'}[t.type];
+    const title=t.type=='adj'?'Điều chỉnh số dư':esc(t.cat||'Chuyển tiền')+(t.sub&&t.sub!=t.cat?' › '+esc(t.sub):'');
+    const w=t.type=='tf'?`${esc(an(t.acc))} → ${esc(an(t.to))}`:esc(an(t.acc));
+    html+=`<div class="row"><div><div>${title}</div><div class="mu">${w}${t.note?' · '+esc(t.note):''}</div></div><div class="r ${c}"><b>${sg}${fmt(Math.abs(t.amt))}</b></div></div>`;
+  });
+  box.innerHTML=html;
 }
 
 /* ===== THÊM/SỬA GIAO DỊCH + TÌM KIẾM VÍ/HẠNG MỤC ===== */
