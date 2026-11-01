@@ -248,14 +248,17 @@ function showAccDetail(){
 /* ===== THÊM/SỬA GIAO DỊCH + TÌM KIẾM VÍ/HẠNG MỤC ===== */
 let editId=null,recMode=false;
 let selAcc=null,selTo=null,selCat=null,selSub=null;
+let qFa='',qTa='',qCat='';
+
 function openTx(id,rec){
   editId=id||null;recMode=!!rec;
   const ed=id?S.tx.find(x=>x.id==id):null;
   if(ed)tType=ed.type;
   selAcc=ed?ed.acc:null;selTo=ed?ed.to:null;
   selCat=ed?ed.cat:null;selSub=ed?ed.sub:null;
+  qFa='';qTa='';qCat='';
   $('#mb').innerHTML=`<div class="mu" style="margin-bottom:6px">${ed?'Sửa giao dịch':rec?'Giao dịch định kỳ (hàng tháng)':'Thêm giao dịch'}</div>
-  <div class="seg" id="sg">${[['exp','Chi'],['inc','Thu'],['tf','Chuyển']].map(([k,l])=>`<button data-k="${k}" onclick="tType='${k}';fillTx()">${l}</button>`).join('')}</div>
+  <div class="seg" id="sg">${[['exp','Chi'],['inc','Thu'],['tf','Chuyển']].map(([k,l])=>`<button data-k="${k}" onclick="tType='${k}';buildPickers()">${l}</button>`).join('')}</div>
   <input id="am" type="number" inputmode="decimal" placeholder="Số tiền (₫)" style="font-size:24px;margin-top:10px">
   <div id="am2" class="mu"></div>
   <div id="accPick"></div>
@@ -265,7 +268,7 @@ function openTx(id,rec){
   <button class="p" onclick="saveTx()">Lưu</button>`;
   $('#md').classList.add('show');
   $('#am').oninput=e=>$('#am2').textContent=e.target.value?fmt(e.target.value)+' ₫':'';
-  fillTx();
+  buildPickers();
   if(ed){
     $('#am').value=ed.amt;
     $('#dd').value=ed.d;
@@ -273,59 +276,102 @@ function openTx(id,rec){
     $('#am').dispatchEvent(new Event('input'));
   }
 }
-function fillTx(){
-  document.querySelectorAll('#sg button').forEach(b=>b.classList.toggle('on',b.dataset.k==tType));
-  // Account picker (searchable)
-  const accList=S.accounts.filter(a=>!a.hidden);
-  const renderAccPick=(target,label,selected,onPick)=>{
-    const q=(window['_q_'+target]||'').toLowerCase();
-    const filtered=accList.filter(a=>!q||a.name.toLowerCase().includes(q)||(S.groups.find(g=>g.id==a.gid)||{}).name.toLowerCase().includes(q));
-    let html=`<div class="mu">${label}</div>
-    <div class="searchbox"><input id="sq_${target}" placeholder="Tìm ví..." value="${esc(window['_q_'+target]||'')}" oninput="window['_q_${target}']=this.value;fillTx()"></div>
-    <div class="slist">`;
-    if(!filtered.length)html+='<div class="mu" style="padding:10px">Không tìm thấy</div>';
-    else filtered.forEach(a=>{
-      const g=S.groups.find(x=>x.id==a.gid);
-      html+=`<div class="${selected==a.id?'on':''}" onclick="${onPick}('${a.id}')">${esc(a.name)} <span class="muted">${esc(g?g.name:'')}</span></div>`;
-    });
-    html+='</div>';
-    return html;
-  };
-  let accHtml=renderAccPick('fa','Từ ví',selAcc,'pickAcc');
-  if(tType=='tf')accHtml+=renderAccPick('ta','Đến ví',selTo,'pickTo');
-  $('#accPick').innerHTML=accHtml;
 
-  // Category picker
-  if(tType=='tf'){
-    $('#catPick').innerHTML='';
-  }else if(tType=='inc'){
-    const q=(window._q_cat||'').toLowerCase();
-    const list=S.cats.inc.filter(c=>!q||c.toLowerCase().includes(q));
-    let html=`<div class="mu">Hạng mục thu</div>
-    <div class="searchbox"><input id="sq_cat" placeholder="Tìm hạng mục..." value="${esc(window._q_cat||'')}" oninput="window._q_cat=this.value;fillTx()"></div>
-    <div class="slist">`;
-    list.forEach(c=>html+=`<div class="${selCat==c?'on':''}" onclick="pickCat('${esc(c)}','${esc(c)}')">${esc(c)}</div>`);
-    html+='</div>';
-    $('#catPick').innerHTML=html;
-  }else{
-    const q=(window._q_cat||'').toLowerCase();
-    let html=`<div class="mu">Hạng mục chi</div>
-    <div class="searchbox"><input id="sq_cat" placeholder="Tìm hạng mục..." value="${esc(window._q_cat||'')}" oninput="window._q_cat=this.value;fillTx()"></div>
-    <div class="slist">`;
-    Object.keys(S.cats.exp).forEach(g=>{
-      (S.cats.exp[g]||[]).forEach(s=>{
-        const label=g+' › '+s;
-        if(q&&!label.toLowerCase().includes(q)&&!g.toLowerCase().includes(q)&&!s.toLowerCase().includes(q))return;
-        html+=`<div class="${selCat==g&&selSub==s?'on':''}" onclick="pickCat('${esc(g)}','${esc(s)}')"><b>${esc(g)}</b> › ${esc(s)}</div>`;
-      });
-    });
-    html+='</div>';
-    $('#catPick').innerHTML=html;
+function selectedChip(name, clearFn){
+  if(!name) return '<span class="mu">Chưa chọn</span>';
+  return `<span class="chip" style="background:var(--pr);color:#fff;border-color:var(--pr)">${esc(name)} <b onclick="${clearFn}" style="cursor:pointer;margin-left:4px">×</b></span>`;
+}
+
+function buildPickers(){
+  document.querySelectorAll('#sg button').forEach(b=>b.classList.toggle('on',b.dataset.k==tType));
+
+  // --- Ví nguồn ---
+  const accName = selAcc ? an(selAcc) : '';
+  let html = `<div class="mu">Từ ví ${selectedChip(accName,"selAcc=null;buildPickers()")}</div>
+  <input id="sq_fa" placeholder="Gõ để tìm ví..." value="${esc(qFa)}" autocomplete="off">
+  <div class="slist" id="list_fa"></div>`;
+
+  if(tType==='tf'){
+    const toName = selTo ? an(selTo) : '';
+    html += `<div class="mu" style="margin-top:8px">Đến ví ${selectedChip(toName,"selTo=null;buildPickers()")}</div>
+    <input id="sq_ta" placeholder="Gõ để tìm ví đích..." value="${esc(qTa)}" autocomplete="off">
+    <div class="slist" id="list_ta"></div>`;
+  }
+  $('#accPick').innerHTML = html;
+
+  // bind search inputs (không vẽ lại input → không mất focus)
+  const faInp = $('#sq_fa');
+  if(faInp){
+    faInp.oninput = ()=>{ qFa = faInp.value; renderAccList('fa', qFa, selAcc, 'pickAcc'); };
+    renderAccList('fa', qFa, selAcc, 'pickAcc');
+  }
+  const taInp = $('#sq_ta');
+  if(taInp){
+    taInp.oninput = ()=>{ qTa = taInp.value; renderAccList('ta', qTa, selTo, 'pickTo'); };
+    renderAccList('ta', qTa, selTo, 'pickTo');
+  }
+
+  // --- Hạng mục ---
+  if(tType==='tf'){
+    $('#catPick').innerHTML = '';
+    return;
+  }
+
+  const catLabel = tType==='inc' ? 'Hạng mục thu' : 'Hạng mục chi';
+  const catDisp = selCat ? (selSub && selSub!==selCat ? selCat+' › '+selSub : selCat) : '';
+  $('#catPick').innerHTML = `<div class="mu">${catLabel} ${selectedChip(catDisp,"selCat=null;selSub=null;buildPickers()")}</div>
+  <input id="sq_cat" placeholder="Gõ để tìm hạng mục..." value="${esc(qCat)}" autocomplete="off">
+  <div class="slist" id="list_cat"></div>`;
+
+  const catInp = $('#sq_cat');
+  if(catInp){
+    catInp.oninput = ()=>{ qCat = catInp.value; renderCatList(qCat); };
+    renderCatList(qCat);
   }
 }
-function pickAcc(id){selAcc=id;fillTx()}
-function pickTo(id){selTo=id;fillTx()}
-function pickCat(c,s){selCat=c;selSub=s;fillTx()}
+
+function renderAccList(target, q, selected, onPick){
+  const box = $('#list_'+target);
+  if(!box) return;
+  const qq = (q||'').toLowerCase().trim();
+  const list = S.accounts.filter(a=>!a.hidden).filter(a=>{
+    if(!qq) return true;
+    const g = S.groups.find(x=>x.id==a.gid);
+    return a.name.toLowerCase().includes(qq) || (g && g.name.toLowerCase().includes(qq));
+  });
+  if(!list.length){
+    box.innerHTML = '<div class="mu" style="padding:10px">Không tìm thấy</div>';
+    return;
+  }
+  box.innerHTML = list.map(a=>{
+    const g = S.groups.find(x=>x.id==a.gid);
+    return `<div class="${selected==a.id?'on':''}" onclick="${onPick}('${a.id}')">${esc(a.name)} <span class="muted">${esc(g?g.name:'')}</span></div>`;
+  }).join('');
+}
+
+function renderCatList(q){
+  const box = $('#list_cat');
+  if(!box) return;
+  const qq = (q||'').toLowerCase().trim();
+  let html = '';
+  if(tType==='inc'){
+    S.cats.inc.filter(c=>!qq || c.toLowerCase().includes(qq)).forEach(c=>{
+      html += `<div class="${selCat==c?'on':''}" onclick="pickCat('${esc(c)}','${esc(c)}')">${esc(c)}</div>`;
+    });
+  }else{
+    Object.keys(S.cats.exp).forEach(g=>{
+      (S.cats.exp[g]||[]).forEach(s=>{
+        if(qq && !g.toLowerCase().includes(qq) && !s.toLowerCase().includes(qq) && !(g+' '+s).toLowerCase().includes(qq)) return;
+        html += `<div class="${selCat==g&&selSub==s?'on':''}" onclick="pickCat('${esc(g)}','${esc(s)}')"><b>${esc(g)}</b> › ${esc(s)}</div>`;
+      });
+    });
+  }
+  box.innerHTML = html || '<div class="mu" style="padding:10px">Không tìm thấy</div>';
+}
+
+function pickAcc(id){ selAcc=id; qFa=''; buildPickers(); }
+function pickTo(id){ selTo=id; qTa=''; buildPickers(); }
+function pickCat(c,s){ selCat=c; selSub=s; qCat=''; buildPickers(); }
 
 function saveTx(){
   const amt=parseFloat($('#am').value);
