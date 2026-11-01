@@ -45,10 +45,30 @@ svg{width:100%;height:auto;display:block}
 const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>Math.round(n).toLocaleString('vi-VN'),uid=()=>Math.random().toString(36).slice(2,9);
 const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
-function seed(){const a=(n,g,o)=>({id:uid(),name:n,gid:g,open:0,hidden:false});
-return{groups:[{id:'g1',name:'Tiền mặt'},{id:'g2',name:'Ngân hàng'},{id:'g3',name:'Tiết kiệm'},{id:'g4',name:'Tài sản (vàng, đất)'},{id:'g5',name:'Ví điện tử'}],
-accounts:[a('Ví tiền mặt','g1'),a('VCB','g2'),a('TCB','g2'),a('MBB','g2'),a('Tiết kiệm tiền mặt','g3'),a('Tiết kiệm ngân hàng','g3'),a('Vàng','g4'),a('Đất','g4'),a('Zalo Pay','g5'),a('MoMo','g5'),a('ShopeePay','g5')],
-cats:{inc:['Tiền lương','Thưởng','Lãi','Thu khác'],exp:{'Ăn uống':['Sáng','Trưa','Tối','Cà phê/Ăn vặt'],'Sinh hoạt':['Điện','Nước','Thuê nhà','Gửi xe','Internet/Điện thoại'],'Đi lại':['Phí cầu đường','Đò phà','Xăng xe','Taxi/Grab'],'Sự kiện':['Cưới hỏi','Ma chay','Giỗ chạp'],'Khác':['Khác']}},tx:[],budget:{},rec:[]}}
+function seed(){const a=(n,g)=>({id:uid(),name:n,gid:g,open:0,hidden:false});
+return{groups:[
+  {id:'g1',name:'Tiền mặt'},
+  {id:'g2',name:'Ngân hàng'},
+  {id:'g3',name:'Tiết kiệm'},
+  {id:'g4',name:'Tài sản'},
+  {id:'g5',name:'Ví điện tử'}
+],
+accounts:[
+  a('Tiền mặt','g1'),
+  a('VCB','g2'),a('TCB','g2'),a('MBB','g2'),
+  a('tk Tiền mặt','g3'),a('tk VCB','g3'),a('tk TCB','g3'),a('tk MBB','g3'),
+  a('Vàng','g4'),a('Nhà - Đất','g4')
+],
+cats:{
+  inc:['Tiền lương','Tiền thưởng','Tiền lãi','Thu khác','Vay nợ'],
+  exp:{
+    'Ăn uống':['Sáng - Trưa - Tối','Cafe - Ăn ngoài'],
+    'Sinh hoạt':['Thuê nhà','Điện','Nước','Cá nhân','Internet - Điện thoại','Sửa chữa nhà cửa'],
+    'Đi lại':['Phí cầu đường - Đò phà','Xăng xe','Taxi'],
+    'Sự kiện':['Hiếu - Hỉ','Trả nợ','Sự kiện khác'],
+    'Khác':['Khác']
+  }
+},tx:[],budget:{},rec:[]}}
 let S;
 const save=()=>persist();
 function runRec(){let ch=0;const td=today();(S.rec||[]).forEach(r=>{let g=0;while(g++<600){const[y,m]=r.next.split('-').map(Number),dn=new Date(y,m,0).getDate(),d=`${r.next}-${String(Math.min(r.day,dn)).padStart(2,'0')}`;if(d>td)break;const t={id:uid(),d,type:r.type,amt:r.amt,acc:r.acc,note:r.note||'',rid:r.id};if(r.type=='tf')t.to=r.to;else{t.cat=r.cat;t.sub=r.sub}S.tx.push(t);ch=1;r.next=m==12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`}});if(ch)save()}
