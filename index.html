@@ -363,22 +363,50 @@ function openTx(id,rec){
   qFa='';qTa='';qCat='';
   $('#mb').innerHTML=`<div class="mu" style="margin-bottom:6px">${ed?'Sửa giao dịch':rec?'Giao dịch định kỳ (hàng tháng)':'Thêm giao dịch'}</div>
   <div class="seg" id="sg">${[['exp','Chi'],['inc','Thu'],['tf','Chuyển']].map(([k,l])=>`<button data-k="${k}" onclick="tType='${k}';buildPickers()">${l}</button>`).join('')}</div>
-  <input id="am" type="number" inputmode="decimal" placeholder="Số tiền (₫)" style="font-size:24px;margin-top:10px">
+  <input id="am" type="text" inputmode="decimal" placeholder="Số tiền hoặc phép tính (vd 50+30*2)" style="font-size:24px;margin-top:10px" autocomplete="off">
   <div id="am2" class="mu"></div>
+  <div id="calcBar" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 10px">
+    ${['+','-','×','÷','(',')','='].map(k=>`<button type="button" class="s" style="flex:1;min-width:40px;padding:10px;font-size:16px;font-weight:700" onclick="calcKey('${k}')">${k}</button>`).join('')}
+    <button type="button" class="s" style="flex:1;min-width:40px;padding:10px;font-size:14px" onclick="calcKey('C')">C</button>
+  </div>
   <div id="accPick"></div>
   <div id="catPick"></div>
   ${rec?'<input id="dd" type="number" min="1" max="31" inputmode="numeric" placeholder="Ngày trong tháng (1-31)">':`<input id="dd" type="date" value="${today()}">`}
   <input id="nt" placeholder="Ghi chú">
   <button class="p" onclick="saveTx()">Lưu</button>`;
   $('#md').classList.add('show');
-  $('#am').oninput=e=>$('#am2').textContent=e.target.value?fmt(e.target.value)+' ₫':'';
+  $('#am').oninput=()=>updAmPreview();
   buildPickers();
   if(ed){
     $('#am').value=ed.amt;
     $('#dd').value=ed.d;
     $('#nt').value=ed.note||'';
-    $('#am').dispatchEvent(new Event('input'));
+    updAmPreview();
   }
+}
+function calcKey(k){
+  const el=$('#am');if(!el)return;
+  if(k==='C'){el.value='';updAmPreview();el.focus();return}
+  if(k==='='){const v=evalAmt(el.value);if(v!=null){el.value=String(Math.round(v));updAmPreview()}else alert('Phép tính không hợp lệ');el.focus();return}
+  const map={'×':'*','÷':'/'};
+  el.value=(el.value||'')+(map[k]||k);
+  updAmPreview();
+  el.focus();
+}
+function evalAmt(s){
+  if(s==null||s==='')return null;
+  let e=String(s).trim().replace(/,/g,'').replace(/\s+/g,'').replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-');
+  if(!/^[\d.+\-*/()]+$/.test(e))return null;
+  try{const n=Function('"use strict";return('+e+')')();return(typeof n==='number'&&isFinite(n)&&n>0)?n:null}catch(err){return null}
+}
+function updAmPreview(){
+  const raw=$('#am')?$('#am').value:'';
+  const v=evalAmt(raw);
+  const el=$('#am2');
+  if(!el)return;
+  if(v!=null)el.textContent=fmt(v)+' ₫';
+  else if(raw&&/[+\-*/×÷]/.test(raw))el.textContent='…';
+  else el.textContent=raw?fmt(raw)+' ₫':'';
 }
 
 function selectedChip(name, clearFn){
@@ -478,8 +506,8 @@ function pickTo(id){ selTo=id; qTa=''; buildPickers(); }
 function pickCat(c,s){ selCat=c; selSub=s; qCat=''; buildPickers(); }
 
 function saveTx(){
-  const amt=parseFloat($('#am').value);
-  if(!(amt>0))return alert('Nhập số tiền');
+  const amt=evalAmt($('#am').value);
+  if(!(amt>0))return alert('Nhập số tiền hợp lệ (có thể dùng + − × ÷)');
   if(!selAcc)return alert('Chọn ví');
   if(tType=='tf'&&!selTo)return alert('Chọn ví đích');
   if(tType=='tf'&&selTo==selAcc)return alert('Chọn 2 ví khác nhau');
