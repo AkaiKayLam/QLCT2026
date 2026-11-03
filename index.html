@@ -259,19 +259,44 @@ let accViewId=null,accQ='';
 function viewAcc(id){
   accViewId=id;accQ='';
   const a=acc(id);if(!a)return;
-  // Chỉ dựng khung 1 lần — ô tìm kiếm không bị vẽ lại
   $('#mb').innerHTML=`<div class="mu" style="margin-bottom:6px">Chi tiết ví</div>
   <h3 style="margin:0 0 4px">${esc(a.name)}</h3>
   <div class="big" style="margin-bottom:12px">${fmt(bal(a))} ₫</div>
   <input id="accSearch" placeholder="Tìm theo ghi chú, hạng mục, từ khóa..." value="" autocomplete="off">
   <div class="mu" id="accCount" style="margin:6px 0"></div>
   <div id="accList"></div>
-  <button class="s" style="width:100%;margin-top:12px" onclick="closeM()">Đóng</button>`;
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="s" style="flex:1" onclick="goHistFromAcc()">Xem lịch sử</button>
+    <button class="s" style="flex:1" onclick="closeM()">Đóng</button>
+  </div>`;
   $('#md').classList.add('show');
   const inp=$('#accSearch');
   inp.oninput=()=>{accQ=inp.value;renderAccTxList()};
   renderAccTxList();
   setTimeout(()=>inp.focus(),100);
+}
+function goHistFromAcc(){
+  closeM();
+  tab='hist';
+  render();
+}
+function editFromAcc(id){
+  closeM();
+  openTx(id);
+}
+function delFromAcc(id){
+  if(!confirm('Xóa giao dịch này?'))return;
+  S.tx=S.tx.filter(t=>t.id!=id);
+  save();
+  // Cập nhật lại số dư + danh sách trong modal
+  const a=acc(accViewId);
+  if(a){
+    const big=$('#mb')&&$('#mb').querySelector('.big');
+    if(big)big.textContent=fmt(bal(a))+' ₫';
+  }
+  renderAccTxList();
+  // Đồng bộ tab Ví nếu đang mở nền
+  if(tab==='home')render();
 }
 function renderAccTxList(){
   const a=acc(accViewId);if(!a)return;
@@ -297,7 +322,10 @@ function renderAccTxList(){
     const sg={inc:'+',exp:'−',tf:'⇄',adj:t.amt<0?'−':'+'}[t.type];
     const title=t.type=='adj'?'Điều chỉnh số dư':esc(t.cat||'Chuyển tiền')+(t.sub&&t.sub!=t.cat?' › '+esc(t.sub):'');
     const w=t.type=='tf'?`${esc(an(t.acc))} → ${esc(an(t.to))}`:esc(an(t.acc));
-    html+=`<div class="row"><div><div>${title}</div><div class="mu">${w}${t.note?' · '+esc(t.note):''}</div></div><div class="r ${c}"><b>${sg}${fmt(Math.abs(t.amt))}</b></div></div>`;
+    const actions=t.type!='adj'
+      ?`<button class="s" onclick="editFromAcc('${t.id}')">Sửa</button> <button class="s" onclick="delFromAcc('${t.id}')">Xóa</button>`
+      :`<button class="s" onclick="delFromAcc('${t.id}')">Xóa</button>`;
+    html+=`<div class="row"><div><div>${title}</div><div class="mu">${w}${t.note?' · '+esc(t.note):''}</div></div><div class="r ${c}"><b>${sg}${fmt(Math.abs(t.amt))}</b><br>${actions}</div></div>`;
   });
   box.innerHTML=html;
 }
@@ -465,17 +493,53 @@ let MK=null,pending=null,tm=null,fb=null,hid=0;const LK=$('#lk'),rr=()=>{if(MK)r
 async function persist(){if(!MK||!S)return;W('qlct.d',await aes(MK,enc.encode(JSON.stringify(S))));clearTimeout(tm);tm=setTimeout(push,4000)}
 async function setPin(pin,master){const salt=rnd(16),w=await aes(await kdf(pin,salt),await crypto.subtle.exportKey('raw',master));W('qlct.v',{salt:b64(salt),...w})}
 const lockUI=h=>{LK.innerHTML='<div class="lkb">'+h+'</div>';LK.style.display='flex'};
-function initApp(){if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});L('qlct.v')?unlockUI():setupUI()}
+function initApp(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      // Tự nhận bản mới khi có cập nhật trên GitHub
+      reg.update().catch(()=>{});
+      setInterval(()=>reg.update().catch(()=>{}),60*60*1000);
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{
+        // SW mới đã active → tải lại để dùng bản mới (không cần gỡ app)
+        if(sessionStorage.getItem('qlct.upd'))return;
+        sessionStorage.setItem('qlct.upd','1');
+        location.reload();
+      });
+    }).catch(()=>{});
+  }
+  L('qlct.v')?unlockUI():setupUI();
+}
 function setupUI(){lockUI(`<h3>Tạo mã PIN</h3><div class="mu">Dùng để mở app và mã hóa dữ liệu trên máy (tối thiểu 6 ký tự).</div><input id="p1" type="password" inputmode="numeric" placeholder="PIN"><input id="p2" type="password" inputmode="numeric" placeholder="Nhập lại PIN"><button class="p" onclick="doSetup()">Tạo</button><button class="s" style="width:100%;margin-top:10px" onclick="restoreUI()">Khôi phục từ Google</button>`)}
 async function doSetup(){const a=$('#p1').value;if(a.length<6||a!=$('#p2').value)return alert('PIN tối thiểu 6 ký tự và 2 lần phải khớp');MK=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);await setPin(a,MK);S=pending||seed();await start()}
 async function start(){S.budget=S.budget||{};S.rec=S.rec||[];runRec();await persist();LK.style.display='none';render()}
-function unlockUI(){const b=L('qlct.bio');lockUI(`<h3>💰 Quản lý chi tiêu</h3><input id="pp" type="password" inputmode="numeric" placeholder="PIN"><button class="p" onclick="doUnlock()">Mở khóa</button>${b?'<button class="s" style="width:100%;margin-top:10px" onclick="bioUnlock()">🔐 Vân tay / khuôn mặt</button>':''}`);$('#pp').onkeydown=e=>{if(e.key=='Enter')doUnlock()};if(b)bioUnlock()}
+function unlockUI(){
+  const b=L('qlct.bio');
+  // Không tự gọi bio — tránh lỗi "Không có khoá truy cập"
+  lockUI(`<h3>💰 Quản lý chi tiêu</h3><input id="pp" type="password" inputmode="numeric" placeholder="PIN"><button class="p" onclick="doUnlock()">Mở khóa</button>${b?'<button class="s" style="width:100%;margin-top:10px" onclick="bioUnlock()">🔐 Vân tay / khuôn mặt</button>':''}`);
+  $('#pp').onkeydown=e=>{if(e.key=='Enter')doUnlock()};
+}
 async function loadData(){const d=L('qlct.d');S=d?JSON.parse(dec.decode(await unaes(MK,d))):seed()}
 async function doUnlock(){try{const v=L('qlct.v');MK=await impMK(await unaes(await kdf($('#pp').value,ub(v.salt)),v));await loadData();await start()}catch(e){MK=null;$('#pp').value='';alert('Sai PIN')}}
 const BS=enc.encode('qlct-prf-salt-v1');
 async function bioKey(cid){const a=await navigator.credentials.get({publicKey:{challenge:rnd(32),allowCredentials:[{type:'public-key',id:cid}],userVerification:'required',extensions:{prf:{eval:{first:BS}}}}});const r=a.getClientExtensionResults().prf;if(!r||!r.results||!r.results.first)return null;return crypto.subtle.importKey('raw',r.results.first,'AES-GCM',false,['encrypt','decrypt'])}
 async function bioEnable(){try{const c=await navigator.credentials.create({publicKey:{challenge:rnd(32),rp:{name:'Chi tiêu'},user:{id:rnd(16),name:'me',displayName:'Tôi'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'},extensions:{prf:{}}}});const cid=new Uint8Array(c.rawId),k=await bioKey(cid);if(!k)return alert('Máy/trình duyệt này chưa hỗ trợ mở khóa sinh trắc cho app. Hãy dùng PIN.');W('qlct.bio',{cid:b64(cid),...await aes(k,await crypto.subtle.exportKey('raw',MK))});alert('Đã bật');rr()}catch(e){alert('Không bật được: '+e.message)}}
-async function bioUnlock(){try{const b=L('qlct.bio'),k=await bioKey(ub(b.cid));if(!k)throw 0;MK=await impMK(await unaes(k,b));await loadData();await start()}catch(e){MK=null}}
+async function bioUnlock(){
+  try{
+    const b=L('qlct.bio');
+    if(!b)return;
+    const k=await bioKey(ub(b.cid));
+    if(!k)throw new Error('no-key');
+    MK=await impMK(await unaes(k,b));
+    await loadData();
+    await start();
+  }catch(e){
+    MK=null;
+    // Xóa khóa hỏng để lần sau không còn nút lỗi
+    try{localStorage.removeItem('qlct.bio')}catch(_){}
+    unlockUI();
+    alert('Vân tay/khuôn mặt không còn hiệu lực trên máy này. Hãy dùng PIN, rồi bật lại trong Cài đặt nếu cần.');
+  }
+}
 async function chPin(){const p=prompt('PIN mới (tối thiểu 6 ký tự):');if(p&&p.length>=6){await setPin(p,MK);alert('Đã đổi PIN')}}
 async function fbInit(){if(fb)return fb;const C=window.FIREBASE_CONFIG;if(!C||!C.apiKey||C.apiKey.startsWith('DIEN'))throw new Error('Chưa điền cấu hình Firebase (file firebase-config.js)');const B='https://www.gstatic.com/firebasejs/10.12.2/',[a,au,fs]=await Promise.all([import(B+'firebase-app.js'),import(B+'firebase-auth.js'),import(B+'firebase-firestore.js')]),app=a.initializeApp(C);return fb={au,fs,auth:au.getAuth(app),db:fs.getFirestore(app)}}
 async function signIn(){try{const f=await fbInit(),r=await f.au.signInWithPopup(f.auth,new f.au.GoogleAuthProvider());localStorage.setItem('qlct.u',r.user.email);rr()}catch(e){alert(e.message)}}
