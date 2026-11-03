@@ -251,8 +251,28 @@ function delSub(g,si){
 }
 
 function adj(id){const a=acc(id),v=prompt('Số dư/giá trị thực của "'+a.name+'" (₫):',Math.round(bal(a)));if(v===null)return;const n=parseFloat(String(v).replace(/[.,\s]/g,''));if(isNaN(n))return;const d=n-bal(a);if(d){S.tx.push({id:uid(),d:today(),type:'adj',amt:d,acc:id});save();render()}}
-function del(id){if(confirm('Xóa giao dịch này?')){S.tx=S.tx.filter(t=>t.id!=id);save();render()}}
+function del(id){askDelTx(id,()=>{S.tx=S.tx.filter(t=>t.id!=id);save();render()})}
 const closeM=()=>{$('#md').classList.remove('show');editId=null;recMode=false};
+function askDelTx(id,onYes){
+  // Hộp xác nhận riêng — không dùng confirm() hệ thống
+  let box=document.getElementById('delBox');
+  if(!box){
+    box=document.createElement('div');
+    box.id='delBox';
+    box.style.cssText='position:fixed;inset:0;background:#0008;z-index:20;display:flex;align-items:center;justify-content:center;padding:20px';
+    document.body.appendChild(box);
+  }
+  box.innerHTML=`<div style="background:var(--card);color:var(--tx);border-radius:16px;padding:20px;width:100%;max-width:320px;text-align:center;box-shadow:0 8px 30px #0005">
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Xóa giao dịch?</div>
+    <div class="mu" style="margin-bottom:18px">Thao tác này không thể hoàn tác.</div>
+    <button id="delYes" style="background:var(--ex);color:#fff;border:0;border-radius:10px;padding:14px;width:100%;font-size:16px;font-weight:700;margin-bottom:10px">XÓA</button>
+    <button id="delNo" style="background:var(--bg);color:var(--tx);border:1px solid var(--bd);border-radius:10px;padding:14px;width:100%;font-size:16px">KHÔNG</button>
+  </div>`;
+  box.style.display='flex';
+  document.getElementById('delYes').onclick=()=>{box.style.display='none';onYes()};
+  document.getElementById('delNo').onclick=()=>{box.style.display='none'};
+  box.onclick=e=>{if(e.target===box)box.style.display='none'};
+}
 
 /* ===== CHI TIẾT VÍ + TÌM KIẾM ===== */
 let accViewId=null,accQ='';
@@ -285,18 +305,17 @@ function editFromAcc(id){
   openTx(id);
 }
 function delFromAcc(id){
-  if(!confirm('Xóa giao dịch này?'))return;
-  S.tx=S.tx.filter(t=>t.id!=id);
-  save();
-  // Cập nhật lại số dư + danh sách trong modal
-  const a=acc(accViewId);
-  if(a){
-    const big=$('#mb')&&$('#mb').querySelector('.big');
-    if(big)big.textContent=fmt(bal(a))+' ₫';
-  }
-  renderAccTxList();
-  // Đồng bộ tab Ví nếu đang mở nền
-  if(tab==='home')render();
+  askDelTx(id,()=>{
+    S.tx=S.tx.filter(t=>t.id!=id);
+    save();
+    const a=acc(accViewId);
+    if(a){
+      const big=$('#mb')&&$('#mb').querySelector('.big');
+      if(big)big.textContent=fmt(bal(a))+' ₫';
+    }
+    renderAccTxList();
+    if(tab==='home')render();
+  });
 }
 function renderAccTxList(){
   const a=acc(accViewId);if(!a)return;
@@ -515,7 +534,10 @@ async function start(){S.budget=S.budget||{};S.rec=S.rec||[];runRec();await pers
 function unlockUI(){
   const b=L('qlct.bio');
   // Không tự gọi bio — tránh lỗi "Không có khoá truy cập"
-  lockUI(`<h3>💰 Quản lý chi tiêu</h3><input id="pp" type="password" inputmode="numeric" placeholder="PIN"><button class="p" onclick="doUnlock()">Mở khóa</button>${b?'<button class="s" style="width:100%;margin-top:10px" onclick="bioUnlock()">🔐 Vân tay / khuôn mặt</button>':''}`);
+  lockUI(`<h3>💰 Quản lý chi tiêu</h3>
+<input id="pp" type="password" inputmode="numeric" placeholder="PIN" style="font-size:18px;padding:14px">
+<button class="p" onclick="doUnlock()" style="padding:16px;font-size:17px">Mở khóa</button>
+${b?`<button onclick="bioUnlock()" style="width:100%;margin-top:14px;padding:18px;font-size:17px;font-weight:700;border:2px solid var(--pr);background:var(--card);color:var(--pr);border-radius:12px">🔐 Vân tay / khuôn mặt</button>`:''}`);
   $('#pp').onkeydown=e=>{if(e.key=='Enter')doUnlock()};
 }
 async function loadData(){const d=L('qlct.d');S=d?JSON.parse(dec.decode(await unaes(MK,d))):seed()}
